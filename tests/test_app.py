@@ -25,6 +25,7 @@ def test_demo_dashboard_all_data_pages(app):
 
 
 def test_demo_video_accessible_without_mango_model(app):
+    app.sidebar.selectbox[0].set_value("Sintetis · data uji").run()
     app.sidebar.radio[0].set_value("Akuisisi & Analisis").run()
     next(button for button in app.button if button.label == "Demo video sintetis · ByteTrack").click().run()
     assert not app.exception

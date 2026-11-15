@@ -23,9 +23,11 @@ from modules.pipeline import process_images, process_video, annotate, finalize, 
 from modules.schema import Run
 from preprocessing.images import PreprocessConfig, read_image
 from reports.export import artifact_zip, write_reports
+from training.model_info import trained_model_info
 
 
 ROOT = Path(__file__).resolve().parent
+TRAINED_INFO = trained_model_info(ROOT / "models")
 OUTPUT = ROOT / "output"
 OUTPUT.mkdir(exist_ok=True)
 logging.basicConfig(filename=OUTPUT / "app.log", level=logging.INFO, encoding="utf-8",
@@ -103,9 +105,10 @@ with st.sidebar:
     page = st.radio("Navigasi", PAGES, key="page")
     st.divider()
     st.markdown("**Mesin deteksi**")
-    mode_label = st.selectbox("Mode", ["Sintetis · data uji", "YOLO umum · demo COCO", "YOLO mangga · model sendiri"])
+    mode_label = st.selectbox("Mode", ["Sintetis · data uji", "YOLO umum · demo COCO", "YOLO mangga · model sendiri"], index=2 if TRAINED_INFO else 0)
     mode = {"Sintetis · data uji": "synthetic", "YOLO umum · demo COCO": "yolo-demo", "YOLO mangga · model sendiri": "mango"}[mode_label]
-    confidence = st.slider("Confidence / skor bentuk sintetis", 0.05, 0.95, 0.25, 0.05)
+    confidence = st.slider("Confidence / skor bentuk sintetis", 0.05, 0.95,
+                           float(TRAINED_INFO["confidence_threshold"]) if TRAINED_INFO and mode == "mango" else 0.25, 0.01)
     model_path = ROOT / "models" / "best.pt"
     trusted_model = False
     class_ids = None
@@ -113,11 +116,17 @@ with st.sidebar:
         local_model = st.text_input("Path model lokal", value=str(model_path))
         uploaded_model = st.file_uploader("Unggah model YOLO .pt", type=["pt"])
         class_text = st.text_input("ID kelas mangga (opsional)", placeholder="0 atau 0,1")
-        trusted_model = st.checkbox("Saya mempercayai asal model ini")
-        st.caption("Checkpoint PyTorch dapat memuat kode. Gunakan model dari sumber tepercaya.")
         model_path = Path(local_model)
+        if TRAINED_INFO and model_path.resolve() == (ROOT / "models" / "best.pt").resolve() and uploaded_model is None:
+            trusted_model = True
+            st.success("Model mangga hasil training lokal aktif")
+            st.caption("Dilakukan fine-tuning pada mangga di kebun, foto smartphone, mangga dipetik, dan contoh non-mangga. Hasil uji tersedia di Dataset & Model.")
+        else:
+            trust_key = hashlib.sha256((str(model_path)+(uploaded_model.name if uploaded_model else "")).encode()).hexdigest()[:12]
+            trusted_model = st.checkbox("Saya mempercayai asal model ini", key="trust_"+trust_key)
+            st.caption("Checkpoint PyTorch dapat memuat kode. Gunakan model dari sumber tepercaya.")
     st.divider()
-    st.caption("Satu sesi = satu pohon. Hasil menghitung buah yang terlihat; buah tertutup daun belum teramati.")
+    st.caption("Satu sesi = satu pohon atau satu kelompok buah setelah dipetik. Buah yang tidak terlihat belum teramati.")
 
 
 def get_detector():
@@ -140,7 +149,7 @@ def get_detector():
 
 def need_run(run):
     if run is None:
-        st.info("Belum ada sesi aktif. Mulai dengan foto/video satu pohon atau data uji sintetis.")
+        st.info("Belum ada sesi aktif. Unggah mangga di pohon / setelah dipetik, atau coba data uji sintetis.")
         st.button("Buka akuisisi", on_click=navigate, args=("Akuisisi & Analisis",))
         return False
     return True
@@ -152,7 +161,7 @@ def run_notice(run):
     elif run.mode == "yolo-demo":
         st.warning("DEMO YOLO COCO — mendeteksi apple/banana/orange. Angka berikut bukan jumlah mangga.")
     else:
-        st.info("Estimasi buah terlihat dari model pengguna. Akurasi belum diketahui sampai dievaluasi dengan ground truth.")
+        st.info("Prediksi mangga yang terlihat. Model dapat dipakai untuk buah di pohon maupun setelah dipetik; akurasi pada sesi ini tetap memerlukan ground truth.")
 
 
 def view_compare(run, key):
@@ -167,14 +176,14 @@ def view_compare(run, key):
 
 def dashboard(run):
     st.markdown('''<div class="hero"><div class="eyebrow">VISION FOR BETTER HARVESTS</div>
-    <h1>Satu pohon. Perspektif yang lebih utuh.</h1>
-    <p>Deteksi buah, hubungkan pengamatan dari berbagai sudut, dan tinjau kesiapan panen dengan data yang dapat diperiksa.</p></div>''', unsafe_allow_html=True)
+    <h1>Kenali mangga, dari kebun hingga meja.</h1>
+    <p>Kenali mangga di pohon maupun setelah dipetik, hubungkan pengamatan antarsudut, dan periksa hasil deteksi serta data panen.</p></div>''', unsafe_allow_html=True)
     if run is None:
         a, b = st.columns([1.4, 1])
         with a:
-            st.subheader("Mulai dari satu pohon mangga")
-            st.write("Ambil foto bertumpang tindih saat mengelilingi pohon. Gunakan model YOLO mangga Anda, lalu tinjau asosiasi sebelum menggunakan estimasinya.")
-            st.button("Mulai analisis pohon", type="primary", on_click=navigate, args=("Akuisisi & Analisis",))
+            st.subheader("Mangga di pohon atau setelah dipetik")
+            st.write("Unggah satu foto untuk mendeteksi mangga, termasuk buah di tangan, meja, atau keranjang. Untuk foto berulang dari objek yang sama, tinjau asosiasi agar buah tidak dihitung dua kali.")
+            st.button("Mulai deteksi mangga", type="primary", on_click=navigate, args=("Akuisisi & Analisis",))
             if st.button("Coba data uji sintetis"):
                 if demo():
                     st.rerun()
@@ -185,6 +194,11 @@ def dashboard(run):
         return
     run_notice(run)
     summary = harvest_summary(run.fruits, run.settings.get("average_weight_g"))
+    if run.mode == "mango":
+        if run.observations:
+            st.success(f"Mangga terdeteksi · {len(run.observations)} pengamatan dengan confidence ≥ {run.settings['confidence']:.2f}.")
+        else:
+            st.warning("Tidak ada mangga terdeteksi pada threshold ini. Ini belum membuktikan bahwa gambar pasti tidak mengandung mangga; periksa foto dan threshold.")
     metrics = st.columns(4)
     for col, label, value in zip(metrics, ["Gambar / frame", "Seluruh deteksi", "Estimasi unik terlihat", "Pengamatan duplikat"],
                                  [len(run.views), len(run.observations), len(run.fruits), len(run.observations)-len(run.fruits)]):
@@ -228,7 +242,7 @@ def dashboard(run):
 
 def acquisition():
     st.title("Akuisisi & Analisis")
-    st.write("Gunakan foto/video dari satu pohon. Foto bertumpang tindih dan gerakan kamera perlahan membantu pencocokan.")
+    st.write("Unggah mangga di pohon atau setelah dipetik. Satu foto cukup untuk deteksi; foto bertumpang tindih dan gerakan perlahan membantu menghitung buah yang sama dari beberapa sudut.")
     if mode == "synthetic":
         st.info("Mode sintetis aktif. Jalankan fixture di bawah atau pilih model YOLO pada sidebar untuk data sendiri.")
         if st.button("Jalankan demo sintetis", type="primary"):
@@ -272,7 +286,7 @@ def acquisition():
     with st.expander("Preprocessing & batas komputasi", expanded=True):
         a, b, c = st.columns(3)
         max_side = a.select_slider("Sisi terpanjang (px)", [640, 960, 1280, 1600], value=960)
-        enhance = b.checkbox("Peningkatan kontras CLAHE", value=True)
+        enhance = b.checkbox("Peningkatan kontras CLAHE", value=mode != "mango")
         brightness = c.slider("Pengali pencahayaan", 0.3, 2.5, 1.0, 0.1)
         crop = None
         if st.checkbox("Crop proporsional"):
@@ -282,7 +296,7 @@ def acquisition():
         stride = st.number_input("Proses setiap N frame (1 = setiap frame)", 1, 30, 1)
         cap = st.number_input("Batas frame video terproses", 1, 1000, 300, step=1)
         st.caption("Koordinat deteksi dan ground truth pada aplikasi menggunakan gambar setelah crop / resize. Stride dan batas frame dapat melewatkan buah.")
-    if st.button("Proses pohon", type="primary", disabled=not(inputs or video)):
+    if st.button("Deteksi & analisis mangga", type="primary", disabled=not(inputs or video)):
         bar = st.progress(0, text="Memuat model")
         try:
             detector = get_detector()
@@ -504,6 +518,40 @@ def history_page(run):
 
 def dataset_page():
     st.title("Dataset & Model")
+    status_path = OUTPUT / "training" / "queued_training.json"
+    if status_path.exists():
+        try:
+            status = json.loads(status_path.read_text(encoding="utf-8"))
+            if status["state"] == "waiting_resources":
+                st.info("Training menunggu memori kosong: minimal RAM 4 GiB dan VRAM 4 GiB untuk GPU. Aplikasi lain tidak ditutup otomatis.")
+            elif status["state"] == "training":
+                st.info(f"Training nyata berlangsung · tahap {status['stage']}.")
+                history = Path(status["run_path"]) / "results.csv"
+                completed = len(pd.read_csv(history)) if history.exists() else 0
+                st.progress(min(completed/status["epochs"], 1), text=f"{completed}/{status['epochs']} epoch tersimpan")
+            elif status["state"] == "failed":
+                st.error("Training belum berhasil. Checkpoint dan log disimpan; model final belum diperbarui.")
+            elif status["state"] == "complete":
+                st.success("Training dan evaluasi selesai; model hasil training tersedia.")
+        except (OSError, ValueError, KeyError):
+            st.caption("Status training sedang diperbarui.")
+    if TRAINED_INFO:
+        st.subheader("Hasil uji model terlatih")
+        rows = []
+        for domain in ["overall", "orchard", "smartphone-orchard", "postharvest"]:
+            result = TRAINED_INFO[domain]
+            metrics = result["standard_metrics"]
+            precision = result["at_selected_threshold"]["Precision"]
+            recall = result["at_selected_threshold"]["Recall"]
+            rows.append({"domain": domain, "foto uji": result["images"], "mAP@50 (%)": metrics["metrics/mAP50(B)"]*100,
+                         "mAP@50:95 (%)": metrics["metrics/mAP50-95(B)"]*100,
+                         "Precision threshold (%)": precision*100 if precision is not None else None,
+                         "Recall threshold (%)": recall*100 if recall is not None else None})
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+        negative = TRAINED_INFO["non_mango"]
+        st.write(f"Non-mangga: {negative['images_with_false_detection']} dari {negative['images']} foto salah menghasilkan deteksi mangga pada threshold {TRAINED_INFO['confidence_threshold']:.2f}.")
+        st.caption("Angka berasal dari test set publik terpisah. Bukan jaminan untuk semua varietas, latar, kamera, dan pencahayaan. Model ini tidak memprediksi kematangan fisiologis.")
+        st.download_button("Unduh laporan evaluasi model JSON", json.dumps(TRAINED_INFO, indent=2), "model_evaluation.json", "application/json")
     st.write("Gunakan anotasi YOLO satu kelas: 0=mango. Pisahkan pohon / perekaman antar split agar frame serupa tidak bocor ke test.")
     st.code("dataset/raw/\n  images/tree01__angle1.jpg\n  labels/tree01__angle1.txt  # class x_center y_center width height (0..1)", language="text")
     source = st.text_input("Folder sumber dataset lokal", str(ROOT / "dataset" / "raw"))

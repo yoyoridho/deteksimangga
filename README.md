@@ -2,45 +2,272 @@
 
 Aplikasi Python / Streamlit untuk mendeteksi objek, melacak video, mengasosiasikan pengamatan antarsudut, memperkirakan jumlah buah **unik yang terlihat**, dan menyimpan hasil yang dapat ditinjau. Antarmuka berbahasa Indonesia dengan tema pertanian hijau, grafik interaktif, kamera browser, riwayat lokal, dan ekspor.
 
-**Status model:** tidak menyertakan model mangga terlatih atau klaim akurasi lapangan. Demo sintetis dapat dijalankan tanpa bobot YOLO. Model COCO resmi `yolo11n.pt` hanya mendeteksi apple/banana/orange untuk menguji jalur YOLO; objek tersebut tidak diubah label menjadi mangga. Gunakan `best.pt` hasil pelatihan mangga untuk foto pohon nyata.
+**Model mangga:** bobot hasil training disimpan di `models/best.pt`, disertai metrik dan SHA-256 pada `models/training_summary.json`. Jika keduanya tersedia dan cocok, aplikasi otomatis memilih model mangga dan threshold hasil validasi. Model mendeteksi mangga di pohon maupun setelah dipetik. Panduan sumber data, pemisahan, training, evaluasi, dan keterbatasannya ada di [training/README.md](training/README.md). Angka pada dataset uji bukan jaminan akurasi pada semua foto lapangan.
+
+Demo sintetis dapat dijalankan tanpa bobot YOLO. Model COCO resmi `yolo11n.pt` hanya mendeteksi apple/banana/orange untuk menguji jalur YOLO; objek tersebut tidak diubah label menjadi mangga. Bila model mangga belum tersedia setelah clone, jalankan workflow training nyata atau masukkan model tepercaya sendiri. Dataset besar dan checkpoint tidak ikut diunggah melalui Git secara otomatis.
 
 Spesifikasi yang digunakan adalah teks permintaan proyek yang diberikan. Dokumen LMS asli “Menghitung Buah Mangga dari Satu Pohon Menggunakan Ponsel” tidak disertakan, sehingga kesesuaian dengan rubrik tambahan di LMS belum dapat diperiksa.
 
-## Instalasi
+## Instalasi lengkap: dari nol sampai aplikasi terbuka
 
-Disarankan Python 3.11 atau 3.12, Windows 10/11 atau macOS, RAM 8 GB atau lebih. CPU didukung; pelatihan lebih cepat memakai GPU yang didukung PyTorch. Lingkungan pengembangan ini juga diuji dengan Python 3.14 dan PyTorch CPU.
+Panduan ini ditujukan untuk **clone baru dari GitHub**. Ikuti urutannya; setiap langkah menyertakan perintah Windows dan macOS/Linux. Perkiraan waktu 10–30 menit, tergantung kecepatan internet. Tidak diperlukan API key, akun cloud, atau database.
+
+### 1. Siapkan kebutuhan dasar
+
+| Kebutuhan | Keterangan |
+|---|---|
+| Sistem operasi | Windows 10/11, macOS 12+, atau Linux |
+| Python | **3.11 atau 3.12 disarankan.** Lingkungan pengembangan ini juga diuji dengan Python 3.14 + PyTorch CPU |
+| Git | Untuk mengunduh repository. Alternatif: unduh ZIP lalu ekstrak |
+| RAM | Minimal 8 GB |
+| Ruang disk | Sekitar 2–3 GB untuk environment dan paket PyTorch |
+| Internet | Diperlukan saat instalasi dependensi dan unduhan model demo |
+| Browser | Chrome, Edge, Firefox, atau Safari versi terbaru |
+
+Periksa Python dan Git sudah terpasang:
+
+```powershell
+python --version
+git --version
+```
+
+Jika `python` tidak dikenali, instal Python dari [python.org](https://www.python.org/downloads/) dan centang **Add python.exe to PATH** saat instalasi. Di Windows, `py -3.12 --version` juga dapat dipakai bila launcher Python tersedia. Jika Git belum ada, instal dari [git-scm.com](https://git-scm.com/downloads).
+
+### 2. Clone repository
+
+```powershell
+git clone https://github.com/yoyoridho/deteksimangga.git
+cd deteksimangga
+```
+
+Jika memakai ZIP, ekstrak file, buka terminal di folder hasil ekstrak, lalu lanjut ke langkah berikut. Semua perintah di bawah harus dijalankan dari **root proyek** (folder yang berisi `app.py`).
+
+### 3. Buat virtual environment
 
 Windows PowerShell:
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m streamlit run app.py
 ```
 
-macOS:
+macOS / Linux:
 
 ```bash
 python3 -m venv .venv
+```
+
+Virtual environment memisahkan paket proyek dari Python sistem. Folder `.venv` tidak ikut masuk Git.
+
+### 4. Instal dependensi
+
+Pilih **salah satu** cara berikut.
+
+**Cara A — tanpa aktivasi (disarankan, paling sedikit masalah di Windows):**
+
+Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+macOS / Linux:
+
+```bash
+.venv/bin/python -m pip install --upgrade pip
 .venv/bin/python -m pip install -r requirements.txt
+```
+
+**Cara B — aktifkan environment lebih dulu:**
+
+Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+Windows Command Prompt:
+
+```bat
+.venv\Scripts\activate.bat
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+macOS / Linux:
+
+```bash
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+Jika PowerShell menolak `Activate.ps1` dengan pesan *running scripts is disabled*, izinkan hanya untuk sesi terminal saat ini:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+```
+
+`requirements.txt` memasang Streamlit, OpenCV, Ultralytics, PyTorch (wheel CPU), NumPy, pandas, SciPy, matplotlib, ReportLab, `lap`, dan pytest. Unduhan paket cukup besar; pastikan koneksi stabil. Jangan mencampur `opencv-python` dengan `opencv-python-headless` pada environment yang sama.
+
+### 5. Verifikasi instalasi
+
+Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe -c "import streamlit, cv2, torch, ultralytics, pandas, reportlab; print('Streamlit', streamlit.__version__); print('PyTorch', torch.__version__, 'CUDA', torch.cuda.is_available())"
+```
+
+macOS / Linux:
+
+```bash
+.venv/bin/python -c "import streamlit, cv2, torch, ultralytics, pandas, reportlab; print('Streamlit', streamlit.__version__); print('PyTorch', torch.__version__, 'CUDA', torch.cuda.is_available())"
+```
+
+Tidak ada error berarti dependensi siap. `CUDA False` normal untuk instalasi CPU. Untuk memastikan seluruh kode berjalan, jalankan tes:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+Tes sintetis tidak memerlukan model mangga. Tes inferensi YOLO nyata akan **skip** bila `models/yolo11n.pt` belum ada.
+
+### 6. Jalankan aplikasi
+
+Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe -m streamlit run app.py
+```
+
+macOS / Linux:
+
+```bash
 .venv/bin/python -m streamlit run app.py
 ```
 
-Buka `http://localhost:8501`. Tidak memerlukan API key atau akun cloud. Instalasi awal dan unduhan bobot demo memerlukan internet; fixture sintetis bekerja offline setelah dependensi terpasang. Pada workspace yang telah disiapkan, `.venv` dan bobot demo tersedia.
+Tunggu hingga terminal menampilkan:
 
-Jika port dipakai, tambahkan `--server.port 8502`. Untuk kompatibilitas API ByteTrack, versi Ultralytics dikunci pada versi yang diuji. Jangan mencampur paket `opencv-python` dan `opencv-python-headless` pada environment yang sama. Lisensi Ultralytics adalah AGPL-3.0 / Enterprise; periksa ketentuannya bila aplikasi akan didistribusikan.
+```text
+You can now view your Streamlit app in your browser.
+
+Local URL: http://localhost:8501
+Network URL: http://192.168.x.x:8501
+```
+
+Buka **http://localhost:8501** di browser. Biasanya browser terbuka otomatis; jika tidak, salin URL tersebut secara manual. Biarkan terminal tetap berjalan selama aplikasi dipakai. Hentikan dengan `Ctrl+C`.
+
+Jika port 8501 dipakai proses lain:
+
+```powershell
+.\.venv\Scripts\python.exe -m streamlit run app.py --server.port 8502
+```
+
+lalu buka `http://localhost:8502`. Jangan membuka `0.0.0.0` di browser; alamat itu hanya untuk mode akses jaringan.
+
+### 7. Pastikan program berhasil terbuka
+
+Instalasi dinyatakan berhasil bila seluruh pemeriksaan berikut terpenuhi:
+
+1. Halaman **Dashboard** tampil dengan judul “Kenali mangga, dari kebun hingga meja.” dan sidebar berisi **Navigasi** serta **Mesin deteksi**.
+2. Tidak ada traceback atau pesan `ModuleNotFoundError` di halaman maupun terminal.
+3. Tombol **Coba data uji sintetis** dapat diklik. Hasilnya menampilkan 3 gambar, 9 deteksi, dan 3 estimasi buah unik.
+4. Menu **Akuisisi & Analisis**, **Asosiasi & ID**, **Kematangan & Panen**, **Evaluasi**, **Riwayat & Ekspor**, dan **Dataset & Model** dapat dibuka tanpa error.
+5. Pada **Akuisisi & Analisis** mode sintetis, tombol **Demo video sintetis · ByteTrack** berjalan dan menghasilkan video tracking.
+
+Demo sintetis bekerja tanpa bobot YOLO dan tanpa internet setelah dependensi terpasang. Ini adalah uji jalur aplikasi, bukan pengukuran kebun.
+
+### 8. Tambahkan model (opsional, untuk foto mangga nyata)
+
+Repository tidak menyertakan checkpoint `.pt` karena ukuran, lisensi, dan alasan reproduksibilitas. Tanpa model, aplikasi tetap terbuka dalam mode sintetis.
+
+Untuk memakai model mangga hasil training sendiri:
+
+1. Latih model mengikuti [training/README.md](training/README.md), atau letakkan model tepercaya di `models/best.pt`.
+2. Jika tersedia `models/training_summary.json` dengan SHA-256 yang cocok, aplikasi otomatis memilih **YOLO mangga · model sendiri** dan threshold hasil validasi.
+3. Alternatif: unggah file `.pt` melalui sidebar, centang **Saya mempercayai asal model ini**, lalu proses foto di **Akuisisi & Analisis**.
+
+Untuk sekadar menguji jalur YOLO dengan model COCO resmi (hanya mendeteksi apple/banana/orange, bukan mangga):
+
+```powershell
+.\.venv\Scripts\python.exe -c "from ultralytics import YOLO; YOLO('models/yolo11n.pt')"
+```
+
+Checkpoint PyTorch dapat memuat kode; hanya muat model dari sumber yang Anda percayai.
+
+### 9. Akses dari ponsel di Wi-Fi yang sama (opsional)
+
+```powershell
+.\.venv\Scripts\python.exe -m streamlit run app.py --server.address 0.0.0.0
+```
+
+Cari IP laptop dengan `ipconfig` (Windows) atau pengaturan jaringan (macOS), lalu buka `http://IP-LAPTOP:8501` dari ponsel. Izinkan akses jaringan privat pada firewall bila diminta. Unggah foto/video dapat berjalan lewat HTTP LAN, tetapi **kamera browser umumnya memerlukan HTTPS**; bila kamera tidak tersedia, gunakan aplikasi kamera bawaan lalu unggah fotonya. Aplikasi tidak menyediakan autentikasi, jadi batasi akses pada jaringan tepercaya.
+
+### 10. GPU untuk training atau inferensi cepat (opsional)
+
+Aplikasi berjalan dengan CPU. Untuk GPU NVIDIA, buat environment terpisah agar wheel CUDA tidak bercampur dengan environment aplikasi:
+
+```powershell
+python -m venv .venv-gpu
+.\.venv-gpu\Scripts\python.exe -m pip install -r requirements-gpu.txt
+.\.venv-gpu\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv-gpu\Scripts\python.exe -c "import torch; print(torch.__version__, torch.cuda.is_available(), torch.cuda.get_arch_list())"
+```
+
+`torch.cuda.is_available()` harus `True` bila driver NVIDIA dan GPU didukung. Gunakan interpreter `.venv-gpu` untuk training, dan `.venv` untuk menjalankan aplikasi. Detail batasan GPU Pascal ada di [training/README.md](training/README.md).
+
+### 11. Pemecahan masalah instalasi
+
+| Gejala | Penyebab umum / solusi |
+|---|---|
+| `python` tidak dikenali | Python belum masuk PATH. Instal ulang dengan opsi PATH, atau pakai `py -3.12`. |
+| `Activate.ps1 cannot be loaded` | Jalankan `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`, lalu aktifkan lagi. Atau gunakan Cara A tanpa aktivasi. |
+| `No module named streamlit` / `ModuleNotFoundError` | Perintah dijalankan dengan Python sistem, bukan `.venv`. Selalu gunakan `.\.venv\Scripts\python.exe` (Windows) atau `.venv/bin/python` (macOS/Linux). |
+| Instalasi paket berhenti / timeout | Periksa koneksi, lalu ulangi `pip install -r requirements.txt`. Untuk jaringan lambat tambahkan `--timeout 120`. |
+| PyTorch gagal dipasang di Python 3.13/3.14 | Buat ulang environment dengan Python 3.11/3.12: `py -3.12 -m venv .venv`. |
+| `Address already in use` / port 8501 sibuk | Jalankan dengan `--server.port 8502` dan buka port tersebut. |
+| Halaman kosong atau error koneksi | Pastikan terminal Streamlit masih hidup, buka `http://localhost:8501` (bukan `0.0.0.0`), lalu refresh paksa `Ctrl+F5`. |
+| Aplikasi terbuka tetapi tidak ada model mangga | Normal pada clone baru. Jalankan demo sintetis, latih model, atau unggah `best.pt` tepercaya sesuai langkah 8. |
+| `cv2` error setelah memasang paket lain | Hapus `opencv-python-headless` dari environment, lalu pasang ulang `requirements.txt`. |
+| Kamera browser tidak muncul | Gunakan `localhost` atau HTTPS, izinkan kamera di browser/OS, dan hindari iframe tanpa izin kamera. |
+| Video tracking tidak dipratinjau di browser | Pasang FFmpeg dan pastikan tersedia di PATH. Tanpa FFmpeg, unduh video dan buka dengan VLC. |
+| Proses lambat / kehabisan RAM | Turunkan sisi terpanjang gambar, batas frame video, dan jumlah foto per sesi. Tutup aplikasi lain saat training. |
+
+### 12. Reset atau memperbarui instalasi
+
+Untuk memperbaiki environment yang rusak, hapus `.venv`, lalu ulangi langkah 3–6:
+
+```powershell
+Remove-Item -Recurse -Force .venv
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+Untuk mengambil pembaruan kode:
+
+```powershell
+git pull
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+Data hasil analisis tersimpan di `output/` dan tidak terhapus saat environment dibuat ulang.
+
+Lisensi Ultralytics adalah AGPL-3.0 / Enterprise; periksa ketentuannya bila aplikasi akan didistribusikan. Versi Ultralytics dikunci pada versi yang diuji agar API ByteTrack tetap kompatibel.
 
 ## Mulai cepat
 
 1. Tekan **Coba data uji sintetis** pada Dashboard. Tiga foto berisi tiga bentuk bertekstur diproses menjadi sembilan deteksi dan tiga ID unik; ini pengujian buatan, bukan pengukuran kebun.
 2. Periksa tampilan sebelum/sesudah, tabel deteksi, dan bukti penggabungan pada **Asosiasi & ID**.
-3. Untuk foto sendiri, pilih **YOLO mangga · model sendiri**, masukkan model tepercaya, lalu unggah foto/video pada **Akuisisi & Analisis**.
+3. Untuk foto sendiri, pilih **YOLO mangga · model sendiri** (otomatis jika model hasil training tersedia), lalu unggah foto/video pada **Akuisisi & Analisis**. Foto mangga di tangan, meja, atau keranjang juga dapat diproses. Model lain tetap perlu dikonfirmasi sumbernya.
 4. Tinjau ID dan penggabungan manual sebelum memasukkan data lapangan pada **Kematangan & Panen**.
 5. Masukkan hitungan manual / anotasi pada **Evaluasi**. Unduh hasil di **Riwayat & Ekspor**.
 
 Untuk mencoba tracking tanpa model mangga, buka **Akuisisi & Analisis** dalam mode sintetis dan tekan **Demo video sintetis · ByteTrack**. Video uji berisi 24 frame dengan tiga bentuk yang sama, bukan pengambilan gambar kebun.
 
-Satu sesi harus berasal dari satu pohon. Jangan mencampur pohon berbeda. Sistem tidak mengekstrapolasi jumlah mangga yang tidak pernah terlihat.
+Satu sesi berasal dari satu pohon atau satu kelompok buah setelah dipetik. Jangan mencampur kelompok berbeda bila ingin menghubungkan buah yang sama antarfoto. Sistem tidak mengekstrapolasi jumlah mangga yang tidak pernah terlihat. Tidak ada bbox berarti “tidak terdeteksi pada threshold ini”, bukan bukti pasti bahwa gambar bukan mangga.
 
 ## Akuisisi, smartphone, dan preprocessing
 

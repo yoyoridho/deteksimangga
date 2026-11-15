@@ -36,6 +36,7 @@ class Detector:
                 self.metadata["model_sha256"] = hashlib.file_digest(stream, "sha256").hexdigest()
             self.metadata["model"] = checkpoint.name
             self.metadata["class_names"] = [self.model.names[i] for i in self.class_ids]
+            self.metadata["imgsz"] = self.model.overrides.get("imgsz", 640)
 
     def predict(self, image):
         """Return xyxy, score, original class name. No invented YOLO predictions."""
