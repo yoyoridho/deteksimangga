@@ -1,0 +1,2 @@
+# Optional; use Python 3.11/3.12 if Open3D has no wheel for your Python version.
+open3d>=0.19

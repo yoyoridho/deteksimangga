@@ -1,0 +1,67 @@
+{
+  "kind": "SYNTHETIC TEST DATA - NOT FIELD DATA",
+  "unique_fruits": 3,
+  "ground_truth_boxes": {
+    "V0001": [
+      [
+        137,
+        146,
+        224,
+        275
+      ],
+      [
+        357,
+        206,
+        444,
+        335
+      ],
+      [
+        577,
+        126,
+        664,
+        255
+      ]
+    ],
+    "V0002": [
+      [
+        159,
+        154,
+        246,
+        283
+      ],
+      [
+        379,
+        214,
+        466,
+        343
+      ],
+      [
+        599,
+        134,
+        686,
+        263
+      ]
+    ],
+    "V0003": [
+      [
+        122,
+        141,
+        209,
+        270
+      ],
+      [
+        342,
+        201,
+        429,
+        330
+      ],
+      [
+        562,
+        121,
+        649,
+        250
+      ]
+    ]
+  },
+  "description": "Three textured ellipses, translated views; no real tree or ripeness labels."
+}
